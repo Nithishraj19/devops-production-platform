@@ -78,18 +78,19 @@ pipeline {
         }
 
         stage('Kubernetes Health Check') {
-            steps {
-                sh '''
-                    kubectl run ${APP_NAME}-health-check-${BUILD_NUMBER} \
-                        --rm \
-                        --restart=Never \
-                        --image=${APP_NAME}:${IMAGE_TAG} \
-                        --command -- \
-                        wget -qO- http://localhost:3000/health
-                '''
-            }
-        }
-    }
+	    steps {
+        	sh '''
+            	kubectl port-forward service/${APP_NAME} 3001:3000 > /tmp/${APP_NAME}-port-forward.log 2>&1 &
+            	PORT_FORWARD_PID=$!
+
+            	sleep 3
+
+            	curl -f http://localhost:3001/health
+
+            	kill $PORT_FORWARD_PID || true
+        	'''
+    	}
+}
 
     post {
         always {
