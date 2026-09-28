@@ -1,49 +1,101 @@
 pipeline {
     agent any
 
+    environment {
+        APP_NAME = 'devops-production-platform'
+        IMAGE_TAG = "${BUILD_NUMBER}"
+    }
+
     stages {
 
         stage('Docker Build') {
             steps {
-                sh 'docker build -t devops-production-platform:jenkins .'
+                sh '''
+                    docker build \
+                        -t ${APP_NAME}:${IMAGE_TAG} \
+                        .
+                '''
             }
         }
 
         stage('Run Container') {
             steps {
                 sh '''
-                    docker rm -f devops-production-platform-test || true
+                    docker rm -f ${APP_NAME}-test || true
 
                     docker run -d \
-                        --name devops-production-platform-test \
+                        --name ${APP_NAME}-test \
                         -p 3001:3000 \
-                        devops-production-platform:jenkins
+                        ${APP_NAME}:${IMAGE_TAG}
                 '''
             }
         }
 
-        stage('Health Check') {
+        stage('Application Health Check') {
             steps {
                 sh '''
                     sleep 3
-                    docker exec devops-production-platform-test \
+
+                    docker exec ${APP_NAME}-test \
                         wget -qO- http://localhost:3000/health
                 '''
             }
         }
 
-        stage('Docker Image Check') {
+        stage('Load Image into Kind') {
             steps {
-                sh 'docker images | grep devops-production-platform'
+                sh '''
+                    kind load docker-image \
+                        ${APP_NAME}:${IMAGE_TAG} \
+                        --name devops-platform
+                '''
             }
         }
 
-        stage('Cleanup') {
+        stage('Deploy to Kubernetes') {
             steps {
                 sh '''
-                    docker rm -f devops-production-platform-test || true
+                    kubectl set image \
+                        deployment/${APP_NAME} \
+                        ${APP_NAME}=${APP_NAME}:${IMAGE_TAG}
+
+                    kubectl rollout status \
+                        deployment/${APP_NAME} \
+                        --timeout=120s
                 '''
             }
+        }
+
+        stage('Kubernetes Verification') {
+            steps {
+                sh '''
+                    kubectl get pods \
+                        -l app=${APP_NAME}
+
+                    kubectl get deployment ${APP_NAME}
+                '''
+            }
+        }
+
+        stage('Kubernetes Health Check') {
+            steps {
+                sh '''
+                    kubectl run ${APP_NAME}-health-check-${BUILD_NUMBER} \
+                        --rm \
+                        --restart=Never \
+                        --image=${APP_NAME}:${IMAGE_TAG} \
+                        --command -- \
+                        wget -qO- http://localhost:3000/health
+                '''
+            }
+        }
+    }
+
+    post {
+        always {
+            sh '''
+                docker rm -f ${APP_NAME}-test || true
+            '''
         }
     }
 }
