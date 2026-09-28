@@ -23,14 +23,14 @@ pipeline {
         }
 
         stage('Health Check') {
- 	   steps {
-        	sh '''
-            sleep 3
-            docker exec devops-production-platform-test \
-                wget -qO- http://localhost:3000/health
-        '''
-    	    }
-	}
+            steps {
+                sh '''
+                    sleep 3
+                    docker exec devops-production-platform-test \
+                        wget -qO- http://localhost:3000/health
+                '''
+            }
+        }
 
         stage('Docker Image Check') {
             steps {
