@@ -9,13 +9,6 @@ pipeline {
             }
         }
 
-        stage('Test Application') {
-            steps {
-                sh 'node --version'
-                sh 'npm --version'
-            }
-        }
-
         stage('Docker Build') {
             steps {
                 sh 'docker build -t devops-production-platform:jenkins .'
