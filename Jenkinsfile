@@ -73,6 +73,8 @@ pipeline {
                         -l app=${APP_NAME}
 
                     kubectl get deployment ${APP_NAME}
+
+                    kubectl get service ${APP_NAME}
                 '''
             }
         }
@@ -80,14 +82,38 @@ pipeline {
         stage('Kubernetes Health Check') {
             steps {
                 sh '''
-                    kubectl port-forward service/${APP_NAME} 3001:3000 \
+                    set -e
+
+                    kubectl port-forward \
+                        service/${APP_NAME} \
+                        3001:3000 \
                         > /tmp/${APP_NAME}-port-forward.log 2>&1 &
 
                     PORT_FORWARD_PID=$!
 
-                    sleep 3
+                    HEALTH_CHECK_PASSED=false
 
-                    curl -f http://localhost:3001/health
+                    for i in $(seq 1 15); do
+                        if curl -sf http://localhost:3001/health; then
+                            HEALTH_CHECK_PASSED=true
+                            break
+                        fi
+
+                        sleep 1
+                    done
+
+                    echo ""
+
+                    echo "Port-forward log:"
+                    cat /tmp/${APP_NAME}-port-forward.log || true
+
+                    if [ "$HEALTH_CHECK_PASSED" != "true" ]; then
+                        echo "Kubernetes health check failed"
+                        kill $PORT_FORWARD_PID || true
+                        exit 1
+                    fi
+
+                    echo "Kubernetes health check passed"
 
                     kill $PORT_FORWARD_PID || true
                 '''
