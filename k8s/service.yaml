@@ -9,6 +9,6 @@ spec:
     app: devops-production-platform
 
   ports:
-    - port: 3000
+    - port: http
       targetPort: 3000
       nodePort: 30080
