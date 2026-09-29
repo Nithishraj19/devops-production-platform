@@ -1,10 +1,35 @@
 const http = require("http");
+const client = require("@prometheus-io/client");
 
 const PORT = process.env.PORT || 3000;
 
-const server = http.createServer((req, res) => {
+// Prometheus metrics
+const register = new client.Registry();
+
+client.collectDefaultMetrics({
+  register
+});
+
+// Custom application metric
+const httpRequestsTotal = new client.Counter({
+  name: "http_requests_total",
+  help: "Total number of HTTP requests",
+  labelNames: ["method", "route", "status_code"],
+  registers: [register]
+});
+
+const server = http.createServer(async (req, res) => {
+  // Health check
   if (req.url === "/health") {
-    res.writeHead(200, { "Content-Type": "application/json" });
+    httpRequestsTotal.inc({
+      method: req.method,
+      route: "/health",
+      status_code: "200"
+    });
+
+    res.writeHead(200, {
+      "Content-Type": "application/json"
+    });
 
     res.end(
       JSON.stringify({
@@ -17,7 +42,33 @@ const server = http.createServer((req, res) => {
     return;
   }
 
-  res.writeHead(200, { "Content-Type": "application/json" });
+  // Prometheus metrics endpoint
+  if (req.url === "/metrics") {
+    httpRequestsTotal.inc({
+      method: req.method,
+      route: "/metrics",
+      status_code: "200"
+    });
+
+    res.writeHead(200, {
+      "Content-Type": register.contentType
+    });
+
+    res.end(await register.metrics());
+
+    return;
+  }
+
+  // Application endpoint
+  httpRequestsTotal.inc({
+    method: req.method,
+    route: "/",
+    status_code: "200"
+  });
+
+  res.writeHead(200, {
+    "Content-Type": "application/json"
+  });
 
   res.end(
     JSON.stringify({
